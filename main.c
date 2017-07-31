@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 
     //  Making packet  //
     unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
-    packet = makePacket(dev,t_ip);
+    packet = makePacket(dev,s_ip);
     printPacket(packet,42);
 
     //  Sending packet  //
@@ -72,8 +72,54 @@ int main(int argc, char *argv[])
     printf("##########     Total packet length : [%d (0x%x)]     ##########\n", header->len, header->len);
     printPacket((unsigned char*)rpacket, header->len);
 
-//    struct ether_header* rpacket_ether;
+    //    struct ether_header* rpacket_ether;
+    unsigned char* arpspacket = (unsigned char *)malloc(42*sizeof(unsigned char));
+    struct ether_header* arpsether;
+    arpsether = (struct ether_header*) arpspacket;
 
+    //Input mymac address
+    char mymac[20];
+    mac_eth0((unsigned char*)mymac,dev);
+    for (int i=13;i>6;i--)
+        mymac[i]=mymac[i-1];
+    mymac[6]='-';
+
+    memcpy(arpspacket,rpacket+ETH_ALEN,ETH_ALEN);
+    inputMacAddr(arpspacket+ETH_ALEN,mymac);
+    arpsether->ether_type=htons(ETH_P_ARP);
+
+    //ETHERNET End  //ARP Start
+    struct arphdr* arpHead;
+    arpHead= (struct arphdr*)(arpspacket+ETH_HLEN);
+    arpHead->ar_hrd = htons(ARPHRD_ETHER);
+    arpHead->ar_pro = htons(ETHERTYPE_IP);
+    arpHead->ar_hln = 0x06;
+    arpHead->ar_pln = 0x04;
+    arpHead->ar_op = htons(ARPOP_REPLY);
+
+
+    inputMacAddr(arpspacket+ETH_HLEN+8,mymac);
+
+
+    struct ifreq ifr;
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name, dev, IFNAMSIZ-1);
+    ioctl(fd, SIOCGIFADDR, &ifr);
+    close(fd);
+
+    long ipaddr = inet_addr(inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+    memcpy(arpspacket+ETH_HLEN+14,&ipaddr,4);
+
+
+    // input destination part
+    memcpy(arpspacket+ETH_HLEN+18,rpacket+ETH_ALEN,6);
+
+    ipaddr=inet_addr(s_ip);
+    memcpy(arpspacket+ETH_HLEN+14,&ipaddr,4);
+
+    puts("----------");
+    printPacket(arpspacket,42);
     pcap_close(handle);
     return 0;
 }
@@ -111,7 +157,7 @@ void mac_eth0(unsigned char MAC_str[13], char* interface)
     MAC_str[12]='\0';
 }
 
-unsigned char* makePacket(char* interface, char* gateway_ip)
+unsigned char* makePacket(char* interface, char* s_ip)
 {
     int i,fd;
     unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
@@ -153,7 +199,7 @@ unsigned char* makePacket(char* interface, char* gateway_ip)
 
     //Destination part
     inputMacAddr(packet+ETH_HLEN+18,"000000-000000");
-    ipaddr=inet_addr(gateway_ip);
+    ipaddr=inet_addr(s_ip);
     memcpy(packet+ETH_HLEN+24,&ipaddr,4);
 
     return packet;
