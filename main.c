@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     //  Making packet  //
     unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
     packet = makePacket(dev,s_ip);
-    printPacket(packet,42);
+//    printPacket(packet,42);
 
     //  Sending packet  //
     if (pcap_sendpacket(handle, packet, 42 /* size */) != 0)
@@ -69,8 +69,8 @@ int main(int argc, char *argv[])
         return -1;
     }
     /* Print its length */
-    printf("##########     Total packet length : [%d (0x%x)]     ##########\n", header->len, header->len);
-    printPacket((unsigned char*)rpacket, header->len);
+//    printf("##########     Total packet length : [%d (0x%x)]     ##########\n", header->len, header->len);
+//    printPacket((unsigned char*)rpacket, header->len);
 
     //    struct ether_header* rpacket_ether;
     unsigned char* arpspacket = (unsigned char *)malloc(42*sizeof(unsigned char));
@@ -118,8 +118,13 @@ int main(int argc, char *argv[])
     ipaddr=inet_addr(s_ip);
     memcpy(arpspacket+ETH_HLEN+14,&ipaddr,4);
 
-    puts("----------");
-    printPacket(arpspacket,42);
+//    puts("----------");
+//    printPacket(arpspacket,42);
+    if (pcap_sendpacket(handle, arpspacket, 42 /* size */) != 0)
+    {
+        fprintf(stderr,"\nError sending the packet: %s\n", pcap_geterr(handle));
+        return -1;
+    }
     pcap_close(handle);
     return 0;
 }
