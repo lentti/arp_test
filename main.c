@@ -123,12 +123,14 @@ int makePacket()
         ioctl(fd, SIOCGIFADDR, &ifr);
         close(fd);
 
-        /* display result */
-        printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
-        printf("%x\n",htonl( inet_addr( inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr))));
-        long ipaddr = inet_addr( inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+        long ipaddr = inet_addr(inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
         memcpy(packet+ETH_HLEN+14,&ipaddr,4);
 
+        //Destination part
+        inputMacAddr(packet+ETH_HLEN+18,"000000-000000");
+        char ipAddr_char[16]="192.168.75.2";
+        ipaddr=inet_addr(ipAddr_char);
+        memcpy(packet+ETH_HLEN+24,&ipaddr,4);
         printPacket(packet,42);
     }
     return 0;
