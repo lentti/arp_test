@@ -18,7 +18,7 @@
 
 #define BUFFER_SIZE 4096
 
-int makePacket(char* interface);
+unsigned char* makePacket(char* interface);
 void printPacket(unsigned char* packet,int len);
 int checkForm(char* form, char* string);
 void inputMacAddr(unsigned char* packet, char* addr);
@@ -26,10 +26,51 @@ void mac_eth0(unsigned char MAC_str[13], char* interface);
 
 int getgateway(in_addr_t * addr);
 
-int main()//int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-    char interface[10]="ens33";
-    makePacket(interface);
+    pcap_t *handle;			/* Session handle */
+    char *dev;			/* The device to sniff on */
+    char errbuf[PCAP_ERRBUF_SIZE];	/* Error string */
+    bpf_u_int32 mask;		/* Our netmask */
+    bpf_u_int32 net;		/* Our IP */
+//    struct pcap_pkthdr *header;	/* The header that pcap gives us */
+
+    if (argc == 1){ // If no input argument
+        /* Define the device */
+        dev = pcap_lookupdev(errbuf);
+        if (dev == NULL) {
+            fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
+            return(2);
+        }
+        /* Find the properties for the device */
+        if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
+            fprintf(stderr, "Couldn't get netmask for device %s: %s\n", dev, errbuf);
+            net = 0;
+            mask = 0;
+        }
+    }
+    else{ // We have input argument(s)
+        dev=argv[1];
+    }
+    /* Open the session in promiscuous mode */
+    handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    if (handle == NULL) {
+        fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
+        return(2);
+    }
+
+
+    //  Making packet  //
+    unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
+    packet = makePacket(dev);
+    printPacket(packet,42);
+
+    //  Sending packet  //
+    if (pcap_sendpacket(handle, packet, 42 /* size */) != 0)
+    {
+        fprintf(stderr,"\nError sending the packet: %s\n", pcap_geterr(handle));
+        return -1;
+    }
     return 0;
 }
 
@@ -85,7 +126,7 @@ int checkForm(char* form, char* string)
 
 void mac_eth0(unsigned char MAC_str[13], char* interface)
 {
-    #define HWADDR_len 6
+#define HWADDR_len 6
     int s,i;
     struct ifreq ifr;
     s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -96,24 +137,25 @@ void mac_eth0(unsigned char MAC_str[13], char* interface)
     MAC_str[12]='\0';
 }
 
-int makePacket(char* interface)
+unsigned char* makePacket(char* interface)
 {
     int type,i;
+    unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
     puts("Select packet type     ==========");
     puts("1. Normal ARP request");
     scanf("%d",&type);
     if ( type == 1 ){
-        unsigned char* packet = (unsigned char *)malloc(42*sizeof(unsigned char));
         struct ether_header *etherHead;
         etherHead = (struct ether_header*) packet;
         char input[30];
+        puts("=======   ETHERNET   ========");
         puts("Type Destination MAC Address (Form 012345-ABCDEF) (Type B to broadcast)");
         scanf("%s",input);
         if(!strcmp(input,"b"))
             inputMacAddr(packet,"FFFFFF-FFFFFF");
         else if(checkForm("HHHHHH-HHHHHH",input)){
             puts("Wrong Input");
-            return -1;
+            return NULL;
         }
         else
             inputMacAddr(packet,input);
@@ -129,7 +171,7 @@ int makePacket(char* interface)
         etherHead->ether_type=htons(ETH_P_ARP);
 
         //ETHERNET End  //ARP Start
-        puts("=======  ARP   ========");
+        puts("=======   ARP   ========");
         struct arphdr *arpHead;
         arpHead= (struct arphdr*)(packet+ETH_HLEN);
         arpHead->ar_hrd = htons(ARPHRD_ETHER);
@@ -169,9 +211,8 @@ int makePacket(char* interface)
         strcpy(ipAddr_char,inet_ntoa(*(struct in_addr *)&dg));
         ipaddr=inet_addr(ipAddr_char);
         memcpy(packet+ETH_HLEN+24,&ipaddr,4);
-        printPacket(packet,42);
     }
-    return 0;
+    return packet;
 }
 
 void inputMacAddr(unsigned char* packet, char* addr)
