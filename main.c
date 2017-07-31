@@ -16,19 +16,54 @@
 #include <net/ethernet.h>
 #include <netinet/in.h>
 
+#define BUFFER_SIZE 4096
 
-int makePacket();
+int makePacket(char* interface);
 void printPacket(unsigned char* packet,int len);
 int checkForm(char* form, char* string);
 void inputMacAddr(unsigned char* packet, char* addr);
 void mac_eth0(unsigned char MAC_str[13], char* interface);
 
-int main(int argc, char *argv[])
+int getgateway(in_addr_t * addr);
+
+int main()//int argc, char *argv[])
 {
-    makePacket();
+    char interface[10]="ens33";
+    makePacket(interface);
     return 0;
 }
 
+//////////functions
+
+int getgateway(in_addr_t * addr)
+{
+    long destination, gateway;
+    char iface[IF_NAMESIZE];
+    char buf[BUFFER_SIZE];
+    FILE * file;
+
+    memset(iface, 0, sizeof(iface));
+    memset(buf, 0, sizeof(buf));
+
+    file = fopen("/proc/net/route", "r");
+    if (!file)
+        return -1;
+
+    while (fgets(buf, sizeof(buf), file)) {
+        if (sscanf(buf, "%s %lx %lx", iface, &destination, &gateway) == 3) {
+            if (destination == 0) { /* default */
+                *addr = gateway;
+                fclose(file);
+                return 0;
+            }
+        }
+    }
+
+    /* default route not found */
+    if (file)
+        fclose(file);
+    return -1;
+}
 int checkForm(char* form, char* string)
 {
     int len=strlen(form), i;
@@ -61,7 +96,7 @@ void mac_eth0(unsigned char MAC_str[13], char* interface)
     MAC_str[12]='\0';
 }
 
-int makePacket()
+int makePacket(char* interface)
 {
     int type,i;
     puts("Select packet type     ==========");
@@ -85,7 +120,7 @@ int makePacket()
         puts("Type Source MAC Address (Form 012345-ABCDEF) (Type A to auto-check)");
         scanf("%s",input);
         if(!strcmp(input,"a")){
-            mac_eth0((unsigned char*)input,"ens33");
+            mac_eth0((unsigned char*)input,interface);
             for (i=13;i>6;i--)
                 input[i]=input[i-1];
             input[6]='-';
@@ -107,7 +142,7 @@ int makePacket()
         puts("Type Sender MAC Address (Form 012345-ABCDEF) (Type A to auto-check)");
         scanf("%s",input);
         if(!strcmp(input,"a")){
-            mac_eth0((unsigned char*)input,"ens33");
+            mac_eth0((unsigned char*)input,interface);
             for (i=13;i>6;i--)
                 input[i]=input[i-1];
             input[6]='-';
@@ -119,7 +154,7 @@ int makePacket()
 
         fd = socket(AF_INET, SOCK_DGRAM, 0);
         ifr.ifr_addr.sa_family = AF_INET;
-        strncpy(ifr.ifr_name, "ens33", IFNAMSIZ-1);
+        strncpy(ifr.ifr_name, interface, IFNAMSIZ-1);
         ioctl(fd, SIOCGIFADDR, &ifr);
         close(fd);
 
@@ -128,7 +163,10 @@ int makePacket()
 
         //Destination part
         inputMacAddr(packet+ETH_HLEN+18,"000000-000000");
-        char ipAddr_char[16]="192.168.75.2";
+        in_addr_t dg;
+        getgateway(&dg);
+        char ipAddr_char[16];
+        strcpy(ipAddr_char,inet_ntoa(*(struct in_addr *)&dg));
         ipaddr=inet_addr(ipAddr_char);
         memcpy(packet+ETH_HLEN+24,&ipaddr,4);
         printPacket(packet,42);
